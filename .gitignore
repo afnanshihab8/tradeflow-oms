@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.env.docker
+.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+schema.yml
+staticfiles/
+media/
+.idea/
+.vscode/

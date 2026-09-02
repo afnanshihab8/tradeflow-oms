@@ -1,0 +1,82 @@
+name: tradeflow-oms
+
+x-app-environment: &app-environment
+  DJANGO_SECRET_KEY: ${TF_DJANGO_SECRET_KEY:-local-docker-secret-change-before-deployment}
+  DJANGO_DEBUG: "false"
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,web
+  POSTGRES_DB: ${TF_POSTGRES_DB:-tradeflow_oms}
+  POSTGRES_USER: ${TF_POSTGRES_USER:-tradeflow}
+  POSTGRES_PASSWORD: ${TF_POSTGRES_PASSWORD:-tradeflow-local-password}
+  POSTGRES_HOST: db
+  POSTGRES_PORT: "5432"
+  EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+  DEFAULT_FROM_EMAIL: sales@tradeflow.local
+  DEMO_ADMIN_PASSWORD: ${TF_DEMO_ADMIN_PASSWORD:-LocalAdmin!2026}
+  DEMO_CUSTOMER_PASSWORD: ${TF_DEMO_CUSTOMER_PASSWORD:-LocalCustomer!2026}
+  DB_WAIT_ATTEMPTS: "30"
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${TF_POSTGRES_DB:-tradeflow_oms}
+      POSTGRES_USER: ${TF_POSTGRES_USER:-tradeflow}
+      POSTGRES_PASSWORD: ${TF_POSTGRES_PASSWORD:-tradeflow-local-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: runtime
+    environment:
+      <<: *app-environment
+      SEED_DEMO: ${TF_SEED_DEMO:-true}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${TF_WEB_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/', timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  test:
+    profiles: ["test"]
+    build:
+      context: .
+      target: test
+    environment:
+      <<: *app-environment
+      SEED_DEMO: "false"
+      COVERAGE_FILE: /tmp/.coverage
+      PYTEST_ADDOPTS: "-p no:cacheprovider"
+    depends_on:
+      db:
+        condition: service_healthy
+    init: true
+
+volumes:
+  postgres_data:
